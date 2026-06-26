@@ -1,0 +1,20 @@
+{
+  "name": "baccarat-prediction-api",
+  "version": "4.0.0",
+  "description": "Baccarat Prediction API với 30+ phương pháp phân tích siêu mạnh",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "keywords": ["baccarat", "prediction", "api", "ai", "machine-learning"],
+  "author": "@tranhoang2286",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.6.2",
+    "express": "^4.18.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
