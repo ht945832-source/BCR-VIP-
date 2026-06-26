@@ -38,7 +38,7 @@ const session = axios.create({
     }
 });
 
-// Bộ quản lý Cookie thông minh - Fix lỗi ghi đè mất Token
+// Bộ quản lý Cookie thông minh
 session.interceptors.request.use(config => {
     if (cookieJar) {
         config.headers.Cookie = cookieJar;
@@ -50,14 +50,12 @@ session.interceptors.response.use(res => {
     const setCookie = res.headers['set-cookie'];
     if (setCookie) {
         let cookieMap = new Map();
-        // Nạp cookie cũ vào map
         if (cookieJar) {
             cookieJar.split(';').forEach(c => {
                 const parts = c.trim().split('=');
                 if (parts[0]) cookieMap.set(parts[0], parts.slice(1).join('='));
             });
         }
-        // Ghi đè cookie mới từ server trả về
         setCookie.forEach(cookie => {
             const rawParts = cookie.split(';')[0];
             const eqIndex = rawParts.indexOf('=');
@@ -67,7 +65,6 @@ session.interceptors.response.use(res => {
                 cookieMap.set(name, value);
             }
         });
-        // Chuyển ngược lại thành chuỗi CookieJar
         let newJar = [];
         cookieMap.forEach((val, key) => {
             if (key) newJar.push(`${key}=${val}`);
@@ -77,7 +74,7 @@ session.interceptors.response.use(res => {
     return res;
 }, error => Promise.reject(error));
 
-// Trích xuất CSRF Token an toàn
+// Trích xuất CSRF Token an toàn từ HTML
 function getCsrfToken(html) {
     if (!html || typeof html !== 'string') return null;
     const match = html.match(/<meta\s+name="csrf-token"\s+content="([^"]+)"/);
@@ -105,16 +102,17 @@ async function login() {
         formData.append('_token', token);
         formData.append('action', 'Login');
         
+        // Thêm X-CSRF-TOKEN vào header để tránh lỗi 419 của Laravel backend
         const headers = {
             'Referer': LOGIN_URL,
             'Origin': BASE,
+            'X-CSRF-TOKEN': token, 
             'Content-Type': 'application/x-www-form-urlencoded'
         };
         
         console.log('[AUTH] Gửi request đăng nhập...');
         const loginResp = await session.post(LOGIN_URL, formData.toString(), { headers });
         
-        // Kiểm tra xem có redirect hoặc trả về thành công không
         if (loginResp.status === 200) {
             return true;
         }
@@ -152,30 +150,30 @@ async function fetchBaccaratData() {
             'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
         };
         
-        // Gửi cả chữ THƯỜNG và chữ HOA để phòng trường hợp backend đổi cấu trúc nhận diện
         const formData = new URLSearchParams();
         formData.append('gameCode', 'ae'); 
         
         const resp = await session.post(GETNEWRESULT_URL, formData.toString(), { headers });
         
-        // Trường hợp bị đá session văng ra trang login
         if (resp.data && typeof resp.data === 'string' && (resp.data.includes('login') || resp.data.includes('Sign In'))) {
             throw new Error('SessionExpired');
         }
 
-        // BẮT ĐẦU PHÂN TÍCH VÀ FIX LỖI MẤT BÀN
         if (resp.data && resp.data.data) {
             let listRaw = [];
             if (Array.isArray(resp.data.data)) {
                 listRaw = resp.data.data;
             } else if (typeof resp.data.data === 'object') {
-                listRaw = Object.values(resp.data.data); // Nếu API trả về dạng Object {} thay vì Array []
+                listRaw = Object.values(resp.data.data); 
             }
 
             baccaratData = listRaw.map(item => {
-                // Ép kiểu dữ liệu và quét sạch tất cả các Key có khả năng chứa Số Phiên / Mã Bàn
+                // Tận dụng tối đa việc tìm Key chứa Số Phiên (Session)
+                const sessionId = String(item.session || item.sessionId || item.session_id || item.gameId || item.game_id || item.issue || item.matchId || '0');
+                
                 return {
                     table: String(item.table_name || item.tableName || item.tableCode || item.table || 'Unknown'),
+                    session: sessionId, // <--- BỔ SUNG TRƯỜNG PHIÊN Ở ĐÂY
                     bootNo: String(item.bootNo || item.shoeId || item.shoe_id || item.boot_no || item.bootno || '0'),
                     roundNo: String(item.roundNo || item.round || item.round_no || item.roundId || item.roundno || '0'),
                     result: String(item.result || item.results || item.history || ''),
@@ -215,7 +213,7 @@ async function autoUpdate() {
 // ======================
 // KHỞI TẠO HTTP SERVER
 // ======================
-const app = express();
+const app = Mountain = express();
 
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
@@ -264,7 +262,7 @@ async function start() {
     
     console.log('\n📊 DANH SÁCH BÀN HOẠT ĐỘNG:');
     baccaratData.forEach(item => {
-        console.log(` > Bàn: ${item.table.padEnd(6)} | Phiên: Cơ ${item.bootNo.padEnd(3)} - Ván ${item.roundNo.padEnd(3)} | KQ: ${item.result.substring(0,10)}...`);
+        console.log(` > Bàn: ${item.table.padEnd(6)} | Mã Phiên: ${item.session.padEnd(10)} | Cơ ${item.bootNo.padEnd(3)} - Ván ${item.roundNo.padEnd(3)} | KQ: ${item.result.substring(0,10)}...`);
     });
 
     autoUpdate();
